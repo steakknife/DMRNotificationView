@@ -8,6 +8,8 @@
 
 #import <UIKit/UIKit.h>
 
+
+
 typedef void (^DMRNotificationViewDidTapHandler) ();
 
 /** Predefined colors */
@@ -18,7 +20,11 @@ typedef NS_OPTIONS(NSUInteger, DMRNotificationViewType)
         DMRNotificationViewTypeSuccess     = 2         // Green panel
 };
 
+@protocol DMRNotificationViewDelegate;
+
 @interface DMRNotificationView : UIView
+
+@property (nonatomic, assign) id <DMRNotificationViewDelegate> delegate;
 
 /* Set this block to be notified when the user taps on the view. */
 @property (nonatomic, copy) DMRNotificationViewDidTapHandler didTapHandler;
@@ -90,5 +96,18 @@ typedef NS_OPTIONS(NSUInteger, DMRNotificationViewType)
  Dismisses the notification view. Slides the notification view up if animated.
  */
 -(void)dismissAnimated:(BOOL)animated;
+
+@end
+
+@protocol DMRNotificationViewDelegate
+@optional
+
+- (void) notificationWillAppearAnimated:(BOOL)animated;
+- (void) notificationDidAppearAnimated:(BOOL)animated;
+
+- (void) notificationDidTapAnimated:(BOOL)animated; // only tapping
+
+- (void) notificationWillDisappearAnimated:(BOOL)animated; // either from tapping or timeout
+- (void) notificationDidDisappearAnimated:(BOOL)animated;  // either from tapping or timeout
 
 @end

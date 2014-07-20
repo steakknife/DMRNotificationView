@@ -14,14 +14,23 @@ static NSTimeInterval kNotificationViewDefaultHideTimeInterval = 4.5;   // Numbe
 static CGFloat kNotificationViewVerticalInset = 10.0;                   // Top and bottom inset
 static CGFloat kNotificationViewLabelVerticalPadding = 5.0;             // Distance between title and subtitle
 static CGFloat kNotificationViewShadowOffset = 5.0;                     // Shadow offset
+static UIColor *kNotificationViewDefaultTintColor;                      // Default tint color
+static UIColor *kNotificationViewDefaultBackgroundColor;                // Default background color
 
 @implementation DMRNotificationView
+@synthesize delegate = _delegate;
+@synthesize tintColor = _tintColor;
 
 -(void)dealloc
 {
     [self setDidTapHandler:nil];
 }
 
+
++(void)initialize {
+    kNotificationViewDefaultTintColor = [UIColor colorWithRed:0.133 green:0.267 blue:0.533 alpha:1.000];
+    kNotificationViewDefaultBackgroundColor = UIColor.clearColor;
+}
 
 
 
@@ -31,22 +40,19 @@ static CGFloat kNotificationViewShadowOffset = 5.0;                     // Shado
 -(id)initWithTitle:(NSString *)title subTitle:(NSString *)subTitle targetView:(UIView *)view
 {
     self = [super initWithFrame:CGRectZero];
-    if (self)
-    {        
-        [self setBackgroundColor:[UIColor clearColor]];
-        [self setContentMode:UIViewContentModeRedraw];
-        [self setAutoresizingMask:UIViewAutoresizingFlexibleWidth];
-        
-        [self setTitle:title];
-        [self setSubTitle:subTitle];
-        [self setTargetView:view];
-        [self setIsTransparent:YES];
-        [self setTintColor:[UIColor colorWithRed:0.133 green:0.267 blue:0.533 alpha:1.000]];
-        [self setHideTimeInterval:kNotificationViewDefaultHideTimeInterval];
+    if (self) {
+        self.tintColor = kNotificationViewDefaultTintColor;
+        self.backgroundColor = kNotificationViewDefaultBackgroundColor;
+        self.contentMode = UIViewContentModeRedraw;
+        self.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+        self.title = title;
+        self.subTitle = subTitle;
+        self.targetView = view;
+        self.isTransparent = YES;
+        self.hideTimeInterval = kNotificationViewDefaultHideTimeInterval;
     }
     return self;
 }
-
 
 
 #pragma mark -
@@ -61,8 +67,9 @@ static CGFloat kNotificationViewShadowOffset = 5.0;                     // Shado
 {
     DMRNotificationView *notificationView = [[self alloc] initWithTitle:title subTitle:subTitle targetView:view];
     
-    if (tintColor)
-        [notificationView setTintColor:tintColor];
+    if (tintColor) {
+        notificationView.tintColor = tintColor;
+    }
     
     [notificationView showAnimated:YES];
 }
@@ -100,8 +107,7 @@ static CGFloat kNotificationViewShadowOffset = 5.0;                     // Shado
     CGFloat labelVerticalPosition = kNotificationViewVerticalInset;    
     
     // Title
-    if (_title.length > 0)
-    {
+    if (_title.length > 0) {
         [textColor set];
         CGSize titleSize = [self expectedTitleSize];
         
@@ -117,8 +123,7 @@ static CGFloat kNotificationViewShadowOffset = 5.0;                     // Shado
     }
     
     // Subtitle
-    if (_subTitle.length > 0)
-    {   
+    if (_subTitle.length > 0) {
         [textColor set];
         CGSize subTitleSize = [self expectedSubTitleSize];
         
@@ -140,6 +145,12 @@ static CGFloat kNotificationViewShadowOffset = 5.0;                     // Shado
 //    CGContextStrokePath(ref);
 }
 
+- (void)performDelegateCallback:(SEL)selector animated:(BOOL)animated {
+    NSObject * delegate = (NSObject *)self.delegate;
+    if ([delegate respondsToSelector:selector]) {
+        [delegate performSelectorOnMainThread:selector withObject:[NSNumber numberWithBool:animated] waitUntilDone:NO];
+    }
+}
 
 
 
@@ -148,6 +159,8 @@ static CGFloat kNotificationViewShadowOffset = 5.0;                     // Shado
 
 -(void)showAnimated:(BOOL)animated
 {
+    [self performDelegateCallback:@selector(notificationWillAppearAnimated:) animated:animated];
+    
     CGSize expectedSize = [self expectedSize];
     [self setFrame:CGRectMake(0.0, 0.0, expectedSize.width, expectedSize.height)];
     
@@ -155,39 +168,38 @@ static CGFloat kNotificationViewShadowOffset = 5.0;                     // Shado
     [self setCenter:CGPointMake(self.center.x, self.center.y-self.bounds.size.height)];
     [_targetView addSubview:self];
     
-    if (animated)
-    {
+    if (animated) {
         [UIView animateWithDuration:0.3 delay:0.0 options:UIViewAnimationOptionCurveEaseIn animations:^{
             [self setCenter:animateToCenter];
         } completion:nil];
-    }
-    else
-    {
+    } else {
         [self setCenter:animateToCenter];
     }
     
-    if (_hideTimeInterval > 0)
-    {
+    if (_hideTimeInterval > 0) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, _hideTimeInterval* NSEC_PER_SEC), dispatch_get_main_queue(), ^{
             [self dismissAnimated:YES];
         });
     }
+    
+    [self performDelegateCallback:@selector(notificationDidAppearAnimated:) animated:animated];
 }
 
 -(void)dismissAnimated:(BOOL)animated
 {
-    if (animated)
-    {
+    [self performDelegateCallback:@selector(notificationWillDisppearAnimated:) animated:animated];
+    
+    if (animated) {
         [UIView animateWithDuration:0.3 delay:0.0 options:UIViewAnimationOptionCurveEaseOut animations:^{
             [self setCenter:CGPointMake(self.center.x, -self.bounds.size.height)];
         } completion:^(BOOL finished) {
             [self removeFromSuperview];
         }];
-    }
-    else
-    {
+    } else {
         [self removeFromSuperview];
     }
+    
+    [self performDelegateCallback:@selector(notificationDidDisappearAnimated:) animated:animated];
 }
 
 
@@ -199,41 +211,55 @@ static CGFloat kNotificationViewShadowOffset = 5.0;                     // Shado
 
 -(void)setTintColor:(UIColor *)tintColor
 {
-    if (tintColor == _tintColor)
+    if (tintColor == _tintColor) {
         return;
+    }
     
-    if ([tintColor isEqual:[UIColor clearColor]] || !tintColor)
-        [NSException raise:NSInvalidArgumentException format:@"Tint color cannot be [UIColor clearColor] or nil"];
+    if ([tintColor isEqual:[UIColor clearColor]]) {
+        [NSException raise:NSInvalidArgumentException format:@"Tint color cannot be [UIColor clearColor]"];
+    }
 
     _tintColor = [self transparentTintColorFromColor:tintColor];
 }
 
+- (UIColor *)tintColor {
+    if (!_tintColor) {
+        _tintColor = kNotificationViewDefaultTintColor;
+    }
+    return _tintColor;
+}
+
 -(void)setTargetView:(UIView *)targetView
 {
-    if (_targetView == targetView)
+    if (_targetView == targetView) {
         return;
+    }
     
-    if (!targetView)
+    if (!targetView) {
         [NSException raise:NSInvalidArgumentException format:@"DMRNotificationView must have a targetView"];
+    }
     
     _targetView = targetView;
 }
 
 -(void)setTitle:(NSString *)title
 {
-    if (_title == title)
+    if (_title == title) {
         return;
+    }
     
-    if (title.length == 0)
+    if (title.length == 0) {
         [NSException raise:NSInvalidArgumentException format:@"DMRNotificationView cannot have an empty title"];
+    }
     
     _title = title;
 }
 
 -(void)setType:(DMRNotificationViewType)type
 {
-    if (_type == type)
+    if (_type == type) {
         return;
+    }
     
     _type = type;
     
@@ -285,8 +311,9 @@ static CGFloat kNotificationViewShadowOffset = 5.0;                     // Shado
     
     height += [self expectedTitleSize].height;
     
-    if (_subTitle.length > 0)
-        height += [self expectedSubTitleSize].height+(kNotificationViewLabelVerticalPadding*2);
+    if (_subTitle.length > 0) {
+        height += [self expectedSubTitleSize].height + (2*kNotificationViewLabelVerticalPadding);
+    }
     
     height += kNotificationViewVerticalInset+kNotificationViewShadowOffset;
     
@@ -295,8 +322,9 @@ static CGFloat kNotificationViewShadowOffset = 5.0;                     // Shado
 
 -(CGSize)expectedTitleSize
 {
-    if (_title.length == 0)
+    if (_title.length == 0) {
         return CGSizeZero;
+    }
     
     return [_title sizeWithFont:[self titleFont]
               constrainedToSize:CGSizeMake(_targetView.bounds.size.width-20.0, 999.0)
@@ -305,8 +333,9 @@ static CGFloat kNotificationViewShadowOffset = 5.0;                     // Shado
 
 -(CGSize)expectedSubTitleSize
 {
-    if (_subTitle.length == 0)
+    if (_subTitle.length == 0) {
         return CGSizeZero;
+    }
     
     return [_subTitle sizeWithFont:[self subTitleFont]
                  constrainedToSize:CGSizeMake(_targetView.bounds.size.width-20.0, 999.0)
@@ -315,29 +344,35 @@ static CGFloat kNotificationViewShadowOffset = 5.0;                     // Shado
 
 -(UIFont *)titleFont
 {
-    if (_titleFont)
-        return _titleFont;
+    if (!_titleFont) {
+        _titleFont = [UIFont boldSystemFontOfSize:18.0];
+    }
     
-    return [UIFont boldSystemFontOfSize:18.0];
+    return _titleFont;
 }
 
 -(UIFont *)subTitleFont
 {
-    if (_subTitleFont)
-        return _subTitleFont;
-    
-    return [UIFont systemFontOfSize:15.0];
+    if (!_subTitleFont) {
+        _subTitleFont = [UIFont systemFontOfSize:15.0];
+        
+    }
+
+    return _subTitleFont;
 }
 
 +(UIColor *)tintColorForType:(DMRNotificationViewType)type
 {
-    if (type == DMRNotificationViewTypeWarning)
-        return [UIColor colorWithRed:0.725 green:0.000 blue:0.068 alpha:1.000];
-    
-    if (type == DMRNotificationViewTypeSuccess)
-        return [UIColor greenColor];
-    
-    return [UIColor colorWithRed:0.133 green:0.267 blue:0.533 alpha:1.000];
+    switch (type) {
+        case DMRNotificationViewTypeWarning:
+            return [UIColor colorWithRed:0.725 green:0.000 blue:0.068 alpha:1.000];
+            
+        case DMRNotificationViewTypeSuccess:
+            return [UIColor greenColor];
+            
+        default:
+            return [UIColor colorWithRed:0.133 green:0.267 blue:0.533 alpha:1.000];
+    }
 }
 
 
@@ -351,12 +386,12 @@ static CGFloat kNotificationViewShadowOffset = 5.0;                     // Shado
     UITouch *touch = [touches anyObject];
     CGPoint touchLocation = [touch locationInView:self];
     
-    if (CGRectContainsPoint(self.frame, touchLocation))
-    {
-        if (_didTapHandler)
-        {
-            _didTapHandler();
-            [self setDidTapHandler:nil];
+    if (CGRectContainsPoint(self.frame, touchLocation)) {
+        [self performDelegateCallback:@selector(notificationDidTapAnimated:) animated:YES];
+
+        if (self.didTapHandler) {
+            self.didTapHandler();
+            self.didTapHandler = nil;
         }
         
         [self dismissAnimated:YES];
