@@ -103,13 +103,13 @@ static UIColor *kNotificationViewDefaultBackgroundColor;                // Defau
         case 0:
         case 1:
             {
-                self.buttons = @[firstButtonTitle];
+                self.buttonTitles = @[firstButtonTitle];
             }
             break;
             
         case 2:
             {
-                self.buttons = @[firstButtonTitle, self.buttons[1]];
+                self.buttonTitles = @[firstButtonTitle, self.buttonTitles[1]];
             }
             break;
     }
@@ -125,7 +125,7 @@ static UIColor *kNotificationViewDefaultBackgroundColor;                // Defau
         case 1:
         case 2:
             {
-                self.buttons = @[self.buttons[0], secondButtonTitle];
+                self.buttonTitles = @[self.buttonTitles[0], secondButtonTitle];
             }
             break;
     }
