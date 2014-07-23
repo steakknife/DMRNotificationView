@@ -60,6 +60,7 @@
     [button5 addTarget:self action:@selector(didTapButton:) forControlEvents:UIControlEventTouchUpInside];
     [button5 setTag:4];
     [self.view addSubview:button5];
+    
 }
 
 
@@ -103,9 +104,16 @@
             
         case 3:
             {
-                DMRNotificationView *notificationView = [[DMRNotificationView alloc] initWithTitle:@"Not transparent" subTitle:@"You can disable transparency by setting 'trasparent' to NO" targetView:self.view];
+                DMRNotificationView *notificationView = [[DMRNotificationView alloc] initWithTitle:@"Not transparent" subTitle:@"You can disable transparency by setting 'trasparent' to NO asdfl asdfl asdf asdf asdf asdf asdf ads f adsf asdfasdf asdf asdf asdf as dfasd f asdf asdf asdf asd fasd fas dfasd fa sdf" targetView:self.view];
                 [notificationView setTintColor:[UIColor scrollViewTexturedBackgroundColor]];        
                 [notificationView setIsTransparent:NO];         // Disable tint color transparency
+                notificationView.buttonTitles = @[@"Yes", @"No"];
+                notificationView.hideTimeInterval = 0.0;
+                notificationView.tapShouldDismiss = NO;
+                notificationView.didTapHandler = ^{ NSLog(@"tapped"); };
+                notificationView.didTapHandlerOnlyOnce = NO;
+                notificationView.firstButtonHandler = ^{ NSLog(@"first"); };
+                notificationView.secondButtonHandler = ^{ NSLog(@"second"); };
                 [notificationView showAnimated:YES];
             }
             break;

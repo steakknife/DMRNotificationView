@@ -24,10 +24,32 @@ typedef NS_OPTIONS(NSUInteger, DMRNotificationViewType)
 
 @interface DMRNotificationView : UIView
 
+// Should tapping the first button dismiss the notification?
+@property (nonatomic) BOOL tapFirstButtonShouldDismiss;
+
+// Should tapping the second button dismiss the notification?
+@property (nonatomic) BOOL tapSecondButtonShouldDismiss;
+
+// Should tapping the notificatino dismiss it?
+@property (nonatomic) BOOL tapShouldDismiss;
+
+@property (nonatomic, strong) NSArray *buttonTitles;
+
+@property (nonatomic, readonly) NSArray *buttons;
+
+@property (nonatomic, strong) NSString *firstButtonTitle;
+@property (nonatomic, strong) NSString *secondButtonTitle;
+
+@property (nonatomic, strong) DMRNotificationViewDidTapHandler firstButtonHandler;
+@property (nonatomic, strong) DMRNotificationViewDidTapHandler secondButtonHandler;
+
 @property (nonatomic, assign) id <DMRNotificationViewDelegate> delegate;
 
 /* Set this block to be notified when the user taps on the view. */
 @property (nonatomic, copy) DMRNotificationViewDidTapHandler didTapHandler;
+
+// Should didTapHandler should fire only once?
+@property (nonatomic) BOOL didTapHandlerOnlyOnce;
 
 /* Predefined colors. Default is DMRNotificationViewTypeDefault (blue or custom) */
 @property (nonatomic, assign) DMRNotificationViewType type;
@@ -102,12 +124,13 @@ typedef NS_OPTIONS(NSUInteger, DMRNotificationViewType)
 @protocol DMRNotificationViewDelegate
 @optional
 
-- (void) notificationWillAppearAnimated:(BOOL)animated;
-- (void) notificationDidAppearAnimated:(BOOL)animated;
+- (void) notificationWillAppear:(DMRNotificationView *)view animated:(BOOL)animated;
+- (void) notificationDidAppear:(DMRNotificationView *)view animated:(BOOL)animated;
 
-- (void) notificationDidTapAnimated:(BOOL)animated; // only tapping
+- (void) notificationDidTap:(DMRNotificationView *)view; // only tapping
+- (void) notificationDidTapButton:(DMRNotificationView *)view index:(NSInteger)index; // only tapping buttons
 
-- (void) notificationWillDisappearAnimated:(BOOL)animated; // either from tapping or timeout
-- (void) notificationDidDisappearAnimated:(BOOL)animated;  // either from tapping or timeout
+- (void) notificationWillDisappear:(DMRNotificationView *)view animated:(BOOL)animated; // either from tapping or timeout
+- (void) notificationDidDisappear:(DMRNotificationView *)view animated:(BOOL)animated;  // either from tapping or timeout
 
 @end

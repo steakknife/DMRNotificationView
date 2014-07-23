@@ -8,6 +8,26 @@
 
 #import "DMRNotificationView.h"
 
+static const CGFloat kButtonCornerRadius = 3.0;
+static const CGFloat kColorAdjustmentDark = -0.15;
+static const CGFloat kColorAdjustmentLight = 0.35;
+
+static const CGFloat kButtonOriginXOffset = 75;
+static const CGFloat kButtonWidthDefault = 64;
+static const CGFloat kButtonPadding = 2.5;
+
+static const CGFloat minValue = 0.0;
+static const CGFloat maxValue = 1.0;
+
+#define SuppressPerformSelectorLeakWarning(Stuff) \
+do { \
+_Pragma("clang diagnostic push") \
+_Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") \
+Stuff; \
+_Pragma("clang diagnostic pop") \
+} while (0)
+
+
 // Change these values to match your needs...
 static CGFloat kNotificationViewTintColorTransparency = 0.80;           // Default tint color transparency
 static NSTimeInterval kNotificationViewDefaultHideTimeInterval = 4.5;   // Number of seconds until auto dismiss
@@ -17,9 +37,15 @@ static CGFloat kNotificationViewShadowOffset = 5.0;                     // Shado
 static UIColor *kNotificationViewDefaultTintColor;                      // Default tint color
 static UIColor *kNotificationViewDefaultBackgroundColor;                // Default background color
 
+@interface DMRNotificationView ()
+@property (nonatomic) BOOL buttonsAdded;
+@end
+
 @implementation DMRNotificationView
 @synthesize delegate = _delegate;
 @synthesize tintColor = _tintColor;
+@synthesize buttons = _buttons;
+@synthesize buttonTitles = _buttonTitles;
 
 -(void)dealloc
 {
@@ -50,8 +76,59 @@ static UIColor *kNotificationViewDefaultBackgroundColor;                // Defau
         self.targetView = view;
         self.isTransparent = YES;
         self.hideTimeInterval = kNotificationViewDefaultHideTimeInterval;
+        self.tapShouldDismiss = YES;
+        self.tapFirstButtonShouldDismiss = YES;
+        self.tapSecondButtonShouldDismiss = YES;
+        self.didTapHandlerOnlyOnce = YES;
     }
     return self;
+}
+
+- (NSString *)firstButtonTitle {
+    if (self.buttonTitles.count == 0) {
+        return nil;
+    }
+    return self.buttonTitles[0];
+}
+
+- (NSString *)secondButtonTitle {
+    if (self.buttonTitles.count < 2) {
+        return nil;
+    }
+    return self.buttonTitles[1];
+}
+
+- (void)setFirstButtonTitle:(NSString *)firstButtonTitle {
+    switch (self.buttonTitles.count) {
+        case 0:
+        case 1:
+            {
+                self.buttons = @[firstButtonTitle];
+            }
+            break;
+            
+        case 2:
+            {
+                self.buttons = @[firstButtonTitle, self.buttons[1]];
+            }
+            break;
+    }
+    
+}
+
+- (void)setSecondButtonTitle:(NSString *)secondButtonTitle {
+    switch (self.buttonTitles.count) {
+        case 0:
+            [NSException raise:@"" format:@"Cannot add a second button title until first button title is added"];
+            break;
+            
+        case 1:
+        case 2:
+            {
+                self.buttons = @[self.buttons[0], secondButtonTitle];
+            }
+            break;
+    }
 }
 
 
@@ -84,7 +161,9 @@ static UIColor *kNotificationViewDefaultBackgroundColor;                // Defau
     [self showInView:view title:title subTitle:subTitle tintColor:[self tintColorForType:DMRNotificationViewTypeSuccess]];
 }
 
-
+- (BOOL)hasButtons {
+    return self.firstButtonTitle;
+}
 
 
 #pragma mark -
@@ -104,7 +183,9 @@ static UIColor *kNotificationViewDefaultBackgroundColor;                // Defau
     
     UIColor *textColor = [self textColor];                  // Depends on fillColor
     BOOL textIncludesShadow = [self textIncludesShadow];    // Depends on fillColor
-    CGFloat labelVerticalPosition = kNotificationViewVerticalInset;    
+    CGFloat labelVerticalPosition = kNotificationViewVerticalInset;
+    
+    const CGFloat buttonWidth = (self.hasButtons) ? ((UIView *)self.buttons[0]).frame.size.width + kButtonPadding*2 : 0;
     
     // Title
     if (_title.length > 0) {
@@ -114,7 +195,9 @@ static UIColor *kNotificationViewDefaultBackgroundColor;                // Defau
         if (textIncludesShadow)
             CGContextSetShadowWithColor(ref, CGSizeMake(0.0, -1.0), 0.0, [UIColor colorWithWhite:0.0 alpha:0.3].CGColor);
         
-        [_title drawInRect:CGRectMake(10.0, labelVerticalPosition, _targetView.bounds.size.width-20.0, titleSize.height)
+        CGRect titleRect = CGRectMake(10.0, labelVerticalPosition, _targetView.bounds.size.width-20.0-buttonWidth, titleSize.height);
+        
+        [_title drawInRect:titleRect
                   withFont:[self titleFont]
              lineBreakMode:NSLineBreakByWordWrapping
                  alignment:NSTextAlignmentCenter];
@@ -130,7 +213,10 @@ static UIColor *kNotificationViewDefaultBackgroundColor;                // Defau
         if (textIncludesShadow)
             CGContextSetShadowWithColor(ref, CGSizeMake(0.0, -1.0), 0.0, [UIColor colorWithWhite:0.0 alpha:0.3].CGColor);
         
-        [_subTitle drawInRect:CGRectMake((_targetView.bounds.size.width-subTitleSize.width)/2, labelVerticalPosition, _targetView.bounds.size.width-20.0, subTitleSize.height)
+        CGRect subTitleRect = CGRectMake((_targetView.bounds.size.width-subTitleSize.width)/2, labelVerticalPosition, _targetView.bounds.size.width-20.0-buttonWidth, subTitleSize.height);
+
+
+        [_subTitle drawInRect:subTitleRect
                   withFont:[self subTitleFont]
              lineBreakMode:NSLineBreakByWordWrapping];
     }
@@ -143,23 +229,209 @@ static UIColor *kNotificationViewDefaultBackgroundColor;                // Defau
 //    CGContextAddLineToPoint(ref, CGRectGetMaxX(rect), CGRectGetMaxY(rect)-(kNotificationViewShadowOffset+0.5));
 //    CGContextSetStrokeColorWithColor(ref, [UIColor colorWithWhite:1.0 alpha:0.5].CGColor);
 //    CGContextStrokePath(ref);
+    
+    [super drawRect:rect];
 }
 
-- (void)performDelegateCallback:(SEL)selector animated:(BOOL)animated {
+- (void)performDelegateCallback:(SEL)selector {
     NSObject * delegate = (NSObject *)self.delegate;
     if ([delegate respondsToSelector:selector]) {
-        [delegate performSelectorOnMainThread:selector withObject:[NSNumber numberWithBool:animated] waitUntilDone:NO];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            SuppressPerformSelectorLeakWarning([delegate performSelector:selector
+                           withObject:self]);
+        });
+    }
+}
+
+- (void)performDelegateCallback:(SEL)selector
+                    buttonIndex:(NSInteger)buttonIndex{
+    NSObject * delegate = (NSObject *)self.delegate;
+    if ([delegate respondsToSelector:selector]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            SuppressPerformSelectorLeakWarning([delegate performSelector:selector
+                           withObject:self
+                           withObject:@(buttonIndex)]);
+        });
+    }
+}
+
+- (void)performDelegateCallback:(SEL)selector
+                       animated:(BOOL)animated {
+    NSObject * delegate = (NSObject *)self.delegate;
+    if ([delegate respondsToSelector:selector]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            SuppressPerformSelectorLeakWarning([delegate performSelector:selector
+                           withObject:self
+                           withObject:@(animated)]);
+        });
     }
 }
 
 
+#pragma mark -
+#pragma mark Private
+
+- (void)buttonTapped:(id)sender {
+    NSInteger buttonIndex = ((UIButton *)sender).tag;
+    NSLog(@"DMRNotificationView buttonTapped: button%ld pressed", (long)buttonIndex);
+    [self performDelegateCallback:@selector(notificationDidTapButton::)
+                      buttonIndex:buttonIndex];
+    
+    switch (buttonIndex) {
+        case 0:
+            if (self.firstButtonHandler) {
+                dispatch_async(dispatch_get_main_queue(), self.firstButtonHandler);
+            }
+            if (self.tapFirstButtonShouldDismiss) {
+                [self dismissAnimated:YES];
+            }
+            break;
+            
+        case 1:
+            if (self.secondButtonHandler) {
+                dispatch_async(dispatch_get_main_queue(), self.secondButtonHandler);
+            }
+            if (self.tapSecondButtonShouldDismiss) {
+                [self dismissAnimated:YES];
+            }
+            break;
+            
+        default:
+            NSLog(@"DMRNotificationView buttonTapped: Unknown button index: %ld", (long)buttonIndex);
+    }
+}
 
 #pragma mark -
 #pragma mark Public
 
+
+
+
+- (UIColor *)darkerColorForColor:(UIColor *)color
+{
+    CGFloat r,g,b,a;
+    if ([color getRed:&r green:&g blue:&b alpha:&a]) {
+        return [UIColor colorWithRed:MAX(r + kColorAdjustmentDark, minValue)
+                               green:MAX(g + kColorAdjustmentDark, minValue)
+                                blue:MAX(b + kColorAdjustmentDark, minValue)
+                               alpha:a];
+    } else {
+        return nil;
+    }
+}
+
+- (UIColor *)lighterColorForColor:(UIColor *)color
+{
+    CGFloat r, g, b, a;
+    if ([color getRed:&r green:&g blue:&b alpha:&a]){
+        return [UIColor colorWithRed:MIN(r + kColorAdjustmentLight, maxValue)
+                               green:MIN(g + kColorAdjustmentLight, maxValue)
+                                blue:MIN(b + kColorAdjustmentLight, maxValue)
+                               alpha:a];
+    } else {
+        return nil;
+    }
+    
+}
+
+- (NSArray *)buttons {
+    if (!_buttons) {
+        NSLog(@"buttons ctor: %@", self.buttonTitles);
+        NSMutableArray *buttons = [[NSMutableArray alloc] init];
+        int tag = 0;
+        for (NSString *buttonTitle in self.buttonTitles) {
+            UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+           // button.titleLabel.text = buttonTitle;
+           // button.titleLabel.textColor = UIColor.redColor;
+            button.tintColor = UIColor.redColor;
+            [button setTitle:buttonTitle forState:UIControlStateNormal];
+            //button.titleLabel.font = [UIFont systemFontOfSize:kButtonFontSize];
+            
+            [button setBackgroundColor:[self darkerColorForColor:self.backgroundColor]];
+            button.layer.cornerRadius = kButtonCornerRadius;
+            
+            [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            [button setTitleColor:[UIColor blackColor] forState:UIControlStateHighlighted];
+            
+            button.tag = tag++;
+            [button addTarget:self
+                       action:@selector(buttonTapped:)
+             forControlEvents:UIControlEventTouchUpInside];
+            [buttons addObject:button];
+        }
+        _buttons = buttons;
+        _buttonsAdded = NO;
+    }
+    return _buttons;
+}
+
+- (void)setButtonTitles:(NSArray *)buttonTitles {
+    if (_buttonTitles == buttonTitles) {
+        NSLog(@"nothing to do, _buttonTitles; %@, buttonTitles: %@", _buttonTitles, buttonTitles);
+        return;
+    }
+    if (buttonTitles.count > 2) {
+        [NSException raise:@"" format:@"cannot add more than 2 buttons"];
+    }
+    NSLog(@"set button titles to: %@", buttonTitles);
+    self.buttons = nil;
+    _buttonTitles = buttonTitles;
+}
+
+-(void)setButtons:(NSArray *)buttons {
+    if (_buttons == buttons) {
+        return;
+    }
+    if (_buttonsAdded) {
+        for (UIButton *button in _buttons) {
+            [button removeFromSuperview];
+        }
+        _buttonsAdded = NO;
+    }
+    _buttons = buttons;
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    
+    CGFloat notificationWidth = CGRectGetWidth(self.bounds);
+    NSLog(@"notificationWidth: %@", NSStringFromCGRect(self.bounds));
+    
+    UIButton *firstButton = (self.buttons.count > 0) ? self.buttons[0] : nil;
+    UIButton *secondButton = (self.buttons.count == 2) ? self.buttons[1] : nil;
+    CGFloat buttonOriginX = notificationWidth - kButtonOriginXOffset;
+    
+    CGFloat firstButtonOriginY = (secondButton) ? 6 : 17;
+    CGFloat buttonHeight = (firstButton && secondButton) ? 25 : 30;
+    CGFloat secondButtonOriginY = firstButtonOriginY + buttonHeight + kButtonPadding;
+    
+    firstButton.frame = CGRectMake(buttonOriginX, firstButtonOriginY, kButtonWidthDefault, buttonHeight);
+    secondButton.frame = CGRectMake(buttonOriginX, secondButtonOriginY, kButtonWidthDefault, buttonHeight);
+    NSLog(@"firstButton; %@ (frame %@)", firstButton, NSStringFromCGRect(firstButton.frame));
+    NSLog(@"secondButton; %@ (frame %@)", secondButton, NSStringFromCGRect(secondButton.frame));
+}
+
+
+- (void)addAndLayoutButtons {
+    if (_buttonsAdded) {
+        return;
+    }
+    
+    UIButton *firstButton = (self.buttons.count > 0) ? self.buttons[0] : nil;
+    UIButton *secondButton = (self.buttons.count == 2) ? self.buttons[1] : nil;
+    
+    [self addSubview:firstButton];
+    [self addSubview:secondButton];
+    
+    _buttonsAdded = YES;
+}
+
 -(void)showAnimated:(BOOL)animated
 {
     [self performDelegateCallback:@selector(notificationWillAppearAnimated:) animated:animated];
+ 
+    [self addAndLayoutButtons];
+    [self setNeedsLayout];
     
     CGSize expectedSize = [self expectedSize];
     [self setFrame:CGRectMake(0.0, 0.0, expectedSize.width, expectedSize.height)];
@@ -182,12 +454,12 @@ static UIColor *kNotificationViewDefaultBackgroundColor;                // Defau
         });
     }
     
-    [self performDelegateCallback:@selector(notificationDidAppearAnimated:) animated:animated];
+    [self performDelegateCallback:@selector(notificationDidAppear::) animated:animated];
 }
 
 -(void)dismissAnimated:(BOOL)animated
 {
-    [self performDelegateCallback:@selector(notificationWillDisppearAnimated:) animated:animated];
+    [self performDelegateCallback:@selector(notificationWillDisappear::) animated:animated];
     
     if (animated) {
         [UIView animateWithDuration:0.3 delay:0.0 options:UIViewAnimationOptionCurveEaseOut animations:^{
@@ -199,7 +471,7 @@ static UIColor *kNotificationViewDefaultBackgroundColor;                // Defau
         [self removeFromSuperview];
     }
     
-    [self performDelegateCallback:@selector(notificationDidDisappearAnimated:) animated:animated];
+    [self performDelegateCallback:@selector(notificationDidDisappear::) animated:animated];
 }
 
 
@@ -387,14 +659,18 @@ static UIColor *kNotificationViewDefaultBackgroundColor;                // Defau
     CGPoint touchLocation = [touch locationInView:self];
     
     if (CGRectContainsPoint(self.frame, touchLocation)) {
-        [self performDelegateCallback:@selector(notificationDidTapAnimated:) animated:YES];
+        [self performDelegateCallback:@selector(notificationDidTap:)];
 
         if (self.didTapHandler) {
             self.didTapHandler();
-            self.didTapHandler = nil;
+            if (self.didTapHandlerOnlyOnce) {
+              self.didTapHandler = nil;
+            }
         }
         
-        [self dismissAnimated:YES];
+        if (self.tapShouldDismiss) {
+            [self dismissAnimated:YES];
+        }
     }
 }
 @end
